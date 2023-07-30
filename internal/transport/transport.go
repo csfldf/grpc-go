@@ -30,6 +30,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -38,6 +39,7 @@ import (
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/tap"
+	"k8s.io/klog"
 )
 
 type bufferPool struct {
@@ -310,6 +312,12 @@ func (s *Stream) getState() streamState {
 }
 
 func (s *Stream) waitOnHeader() {
+	startTime := time.Now()
+
+	defer func() {
+		klog.Infof("[waitOnHeader] cost %s", time.Since(startTime).String())
+	}()
+
 	if s.headerChan == nil {
 		// On the server headerChan is always nil since a stream originates
 		// only after having received headers.
