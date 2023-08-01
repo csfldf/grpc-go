@@ -40,6 +40,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
+	"k8s.io/klog/v2"
 )
 
 // Compressor defines the interface gRPC uses to compress a message.
@@ -688,6 +689,12 @@ type payloadInfo struct {
 }
 
 func recvAndDecompress(p *parser, s *transport.Stream, dc Decompressor, maxReceiveMessageSize int, payInfo *payloadInfo, compressor encoding.Compressor) ([]byte, error) {
+	startTime := time.Now()
+
+	defer func() {
+		klog.Infof("[recvAndDecompress] startAt: %s, cost %s", startTime.String(), time.Since(startTime).String())
+	}()
+
 	pf, d, err := p.recvMsg(maxReceiveMessageSize)
 	if err != nil {
 		return nil, err

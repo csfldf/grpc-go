@@ -41,6 +41,7 @@ import (
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/tap"
+	"k8s.io/klog/v2"
 )
 
 // ErrNoHeaders is used as a signal that a trailers only response was received,
@@ -320,6 +321,12 @@ func (s *Stream) getState() streamState {
 }
 
 func (s *Stream) waitOnHeader() {
+	startTime := time.Now()
+
+	defer func() {
+		klog.Infof("[waitOnHeader] startAt: %s, cost %s", startTime.String(), time.Since(startTime).String())
+	}()
+
 	if s.headerChan == nil {
 		// On the server headerChan is always nil since a stream originates
 		// only after having received headers.

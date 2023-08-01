@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"golang.org/x/net/trace"
+	"k8s.io/klog/v2"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1103,6 +1104,12 @@ func (s *Server) incrCallsFailed() {
 }
 
 func (s *Server) sendResponse(t transport.ServerTransport, stream *transport.Stream, msg interface{}, cp Compressor, opts *transport.Options, comp encoding.Compressor) error {
+	startTime := time.Now()
+
+	defer func() {
+		klog.Infof("[sendResponse] startAt: %s, cost %s", startTime.String(), time.Since(startTime).String())
+	}()
+
 	data, err := encode(s.getCodec(stream.ContentSubtype()), msg)
 	if err != nil {
 		channelz.Error(logger, s.channelzID, "grpc: server failed to encode response: ", err)
@@ -1169,6 +1176,7 @@ func chainUnaryInterceptors(interceptors []UnaryServerInterceptor) UnaryServerIn
 }
 
 func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.Stream, info *serviceInfo, md *MethodDesc, trInfo *traceInfo) (err error) {
+	klog.Infof("[processUnaryRPC] %s pos1 at %s", md.MethodName, time.Now())
 	shs := s.opts.statsHandlers
 	if len(shs) != 0 || trInfo != nil || channelz.IsOn() {
 		if channelz.IsOn() {
@@ -1187,6 +1195,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		if trInfo != nil {
 			trInfo.tr.LazyLog(&trInfo.firstLine, false)
 		}
+
+		klog.Infof("[processUnaryRPC] %s pos2 at %s", md.MethodName, time.Now())
 		// The deferred error handling for tracing, stats handler and channelz are
 		// combined into one function to reduce stack usage -- a defer takes ~56-64
 		// bytes on the stack, so overflowing the stack will require a stack
@@ -1260,6 +1270,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		}
 	}
 
+	klog.Infof("[processUnaryRPC] %s pos3 at %s", md.MethodName, time.Now())
+
 	// comp and cp are used for compression.  decomp and dc are used for
 	// decompression.  If comp and decomp are both set, they are the same;
 	// however they are kept separate to ensure that at most one of the
@@ -1281,6 +1293,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		}
 	}
 
+	klog.Infof("[processUnaryRPC] %s pos4 at %s", md.MethodName, time.Now())
+
 	// If cp is set, use it.  Otherwise, attempt to compress the response using
 	// the incoming message compression method.
 	//
@@ -1295,6 +1309,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 			stream.SetSendCompress(rc)
 		}
 	}
+
+	klog.Infof("[processUnaryRPC] %s pos5 at %s", md.MethodName, time.Now())
 
 	var payInfo *payloadInfo
 	if len(shs) != 0 || len(binlogs) != 0 {
@@ -1337,7 +1353,10 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		return nil
 	}
 	ctx := NewContextWithServerTransportStream(stream.Context(), stream)
+	handlerStartTime := time.Now()
 	reply, appErr := md.Handler(info.serviceImpl, ctx, df, s.opts.unaryInt)
+	klog.Infof("[handler] %s startAt: %s, cost %s", md.MethodName, handlerStartTime.String(), time.Since(handlerStartTime).String())
+	klog.Infof("[processUnaryRPC] %s pos6 at %s", md.MethodName, time.Now())
 	if appErr != nil {
 		appStatus, ok := status.FromError(appErr)
 		if !ok {
@@ -1412,6 +1431,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		}
 		return err
 	}
+
+	klog.Infof("[processUnaryRPC] %s pos7 at %s", md.MethodName, time.Now())
 	if len(binlogs) != 0 {
 		h, _ := stream.Header()
 		sh := &binarylog.ServerHeader{
@@ -1444,6 +1465,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 			binlog.Log(st)
 		}
 	}
+	klog.Infof("[processUnaryRPC] %s pos8 at %s", md.MethodName, time.Now())
 	return err
 }
 
@@ -1681,6 +1703,8 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 }
 
 func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Stream, trInfo *traceInfo) {
+	startTime := time.Now()
+
 	sm := stream.Method()
 	if sm != "" && sm[0] == '/' {
 		sm = sm[1:]
@@ -1707,10 +1731,16 @@ func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Str
 	service := sm[:pos]
 	method := sm[pos+1:]
 
+	defer func() {
+		klog.Infof("[handleStream] method: %s startAt: %s, cost %s", method, startTime.String(), time.Since(startTime).String())
+	}()
+
 	srv, knownService := s.services[service]
 	if knownService {
 		if md, ok := srv.methods[method]; ok {
+			handlerStartTime := time.Now()
 			s.processUnaryRPC(t, stream, srv, md, trInfo)
+			klog.Infof("[processUnaryRPC] %s startAt: %s, cost %s", md.MethodName, handlerStartTime.String(), time.Since(handlerStartTime).String())
 			return
 		}
 		if sd, ok := srv.streams[method]; ok {

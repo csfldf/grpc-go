@@ -45,6 +45,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
+	"k8s.io/klog/v2"
 )
 
 // StreamHandler defines the handler called by gRPC server to complete the
@@ -990,6 +991,12 @@ func (cs *clientStream) finish(err error) {
 }
 
 func (a *csAttempt) sendMsg(m interface{}, hdr, payld, data []byte) error {
+	startTime := time.Now()
+
+	defer func() {
+		klog.Infof("[sendMsg] startAt: %s, cost %s", startTime.String(), time.Since(startTime).String())
+	}()
+
 	cs := a.cs
 	if a.trInfo != nil {
 		a.mu.Lock()
@@ -1017,6 +1024,12 @@ func (a *csAttempt) sendMsg(m interface{}, hdr, payld, data []byte) error {
 }
 
 func (a *csAttempt) recvMsg(m interface{}, payInfo *payloadInfo) (err error) {
+	startTime := time.Now()
+
+	defer func() {
+		klog.Infof("[recvMsg] startAt: %s, cost %s", startTime.String(), time.Since(startTime).String())
+	}()
+
 	cs := a.cs
 	if len(a.statsHandlers) != 0 && payInfo == nil {
 		payInfo = &payloadInfo{}
