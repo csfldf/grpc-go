@@ -315,7 +315,7 @@ func (s *Stream) waitOnHeader() {
 	startTime := time.Now()
 
 	defer func() {
-		klog.Infof("[waitOnHeader] cost %s", time.Since(startTime).String())
+		klog.Infof("[waitOnHeader] startAt: %s, cost %s", startTime.String(), time.Since(startTime).String())
 	}()
 
 	if s.headerChan == nil {
